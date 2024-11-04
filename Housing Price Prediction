@@ -1,0 +1,106 @@
+# Import Libraries
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from xgboost import XGBRegressor
+
+# Load Dataset
+data = pd.read_csv('housing_data.csv')  # Replace with your path
+data.head()
+
+# Handle Missing Values
+# Replace missing numerical values with median, and categorical with mode
+for column in data.select_dtypes(include='number').columns:
+    data[column].fillna(data[column].median(), inplace=True)
+for column in data.select_dtypes(include='object').columns:
+    data[column].fillna(data[column].mode()[0], inplace=True)
+
+# Feature Engineering
+# Create a new feature: Age of the House at Sale
+data['House_Age'] = data['YearSold'] - data['YearBuilt']
+data['Price_per_SqFt'] = data['SalePrice'] / data['GrLivArea']
+
+# Exploratory Data Analysis (EDA)
+# Correlation Heatmap
+plt.figure(figsize=(12, 8))
+sns.heatmap(data.corr(), annot=True, fmt=".2f", cmap="coolwarm")
+plt.title("Correlation Heatmap")
+plt.show()
+
+# Data Preprocessing
+# Separate target and features
+X = data.drop(['SalePrice', 'Id'], axis=1)
+y = data['SalePrice']
+
+# Split data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Column Transformer for Preprocessing
+# Identify categorical and numerical columns
+categorical_features = X.select_dtypes(include=['object']).columns
+numerical_features = X.select_dtypes(include=['number']).columns
+
+# Create preprocessing pipeline
+numerical_transformer = StandardScaler()
+categorical_transformer = OneHotEncoder(handle_unknown='ignore')
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numerical_transformer, numerical_features),
+        ('cat', categorical_transformer, categorical_features)
+    ])
+
+# Model Pipeline
+# Try three models: Linear Regression, Random Forest, and Gradient Boosting
+models = {
+    'Linear Regression': LinearRegression(),
+    'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42),
+    'Gradient Boosting': GradientBoostingRegressor(n_estimators=100, random_state=42)
+}
+
+for model_name, model in models.items():
+    pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('model', model)])
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
+    print(f"Model: {model_name}")
+    print(f"Mean Absolute Error: {mean_absolute_error(y_test, y_pred):.2f}")
+    print(f"Mean Squared Error: {mean_squared_error(y_test, y_pred):.2f}")
+    print(f"R^2 Score: {r2_score(y_test, y_pred):.2f}\n")
+
+# Hyperparameter Tuning for RandomForest
+param_grid = {
+    'model__n_estimators': [100, 200, 300],
+    'model__max_depth': [None, 10, 20],
+    'model__min_samples_split': [2, 5, 10]
+}
+
+rf = Pipeline(steps=[('preprocessor', preprocessor),
+                     ('model', RandomForestRegressor(random_state=42))])
+grid_search = GridSearchCV(rf, param_grid, cv=5, scoring='neg_mean_squared_error')
+grid_search.fit(X_train, y_train)
+
+print("Best parameters:", grid_search.best_params_)
+
+# Model Evaluation
+best_rf = grid_search.best_estimator_
+y_pred = best_rf.predict(X_test)
+print("Final Model Performance:")
+print(f"MAE: {mean_absolute_error(y_test, y_pred):.2f}")
+print(f"MSE: {mean_squared_error(y_test, y_pred):.2f}")
+print(f"R^2: {r2_score(y_test, y_pred):.2f}")
+
+# Feature Importance
+importances = best_rf.named_steps['model'].feature_importances_
+feature_names = np.concatenate([numerical_features, grid_search.best_estimator_.named_steps['preprocessor'].transformers_[1][1].get_feature_names_out()])
+feature_importances = pd.Series(importances, index=feature_names)
+feature_importances.nlargest(10).plot(kind='barh', color='skyblue')
+plt.title("Top 10 Feature Importances")
+plt.show()
