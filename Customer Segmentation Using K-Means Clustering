@@ -1,0 +1,73 @@
+# Importing necessary libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+
+# Load the dataset
+# Replace 'path/to/customer_data.csv' with your actual data file
+data_path = 'path/to/customer_data.csv'
+data = pd.read_csv(data_path)
+
+# Display the first few rows of the dataset
+print(data.head())
+
+# Preprocessing
+# Assuming the dataset has relevant features for clustering
+features = data[['Annual_Income', 'Spending_Score', 'Age']]  # Select relevant features
+
+# Scale the features
+scaler = StandardScaler()
+scaled_features = scaler.fit_transform(features)
+
+# Determine the optimal number of clusters using the Elbow method
+inertia = []
+for i in range(1, 11):
+    kmeans = KMeans(n_clusters=i, random_state=42)
+    kmeans.fit(scaled_features)
+    inertia.append(kmeans.inertia_)
+
+# Plotting the elbow curve
+plt.figure(figsize=(10, 6))
+plt.plot(range(1, 11), inertia, marker='o')
+plt.title('Elbow Method For Optimal k')
+plt.xlabel('Number of clusters (k)')
+plt.ylabel('Inertia')
+plt.xticks(range(1, 11))
+plt.grid()
+plt.show()
+
+# Fit the KMeans model with the optimal number of clusters (e.g., 5)
+optimal_k = 5  # This should be chosen based on the elbow method plot
+kmeans = KMeans(n_clusters=optimal_k, random_state=42)
+clusters = kmeans.fit_predict(scaled_features)
+
+# Add the cluster labels to the original data
+data['Cluster'] = clusters
+
+# Visualize the clusters using PCA for 2D representation
+pca = PCA(n_components=2)
+principal_components = pca.fit_transform(scaled_features)
+
+# Creating a DataFrame for the PCA results
+pca_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
+pca_df['Cluster'] = clusters
+
+# Plotting the clusters
+plt.figure(figsize=(10, 6))
+plt.scatter(pca_df['PC1'], pca_df['PC2'], c=pca_df['Cluster'], cmap='viridis', alpha=0.5)
+plt.title('Customer Segmentation Using K-Means Clustering')
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.colorbar(label='Cluster')
+plt.grid()
+plt.show()
+
+# Analyze the clusters
+cluster_summary = data.groupby('Cluster').mean()  # Summary statistics for each cluster
+print(cluster_summary)
+
+# Save the results
+data.to_csv('customer_segments.csv', index=False)  # Save the original data with cluster labels
